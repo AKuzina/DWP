@@ -7,10 +7,10 @@ We use Deep Weight Prior (DWP) [1] to perform knowledge transfer from large sour
 We use a common benchmark - BRATS18 [2] as a target and MS [3] dataset as source dataset. 
 The method perform better that randomly initialized and fine-tuned models.   
 
-![res](!pics/BRATS_res.png)
+![res](pics/BRATS_res.png)
 
 
-![predict](!pics/predictions_pics.png)
+![predict](pics/predictions_pics.png)
 
 
 
