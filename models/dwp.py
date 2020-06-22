@@ -17,7 +17,7 @@ class BaseModel(pl.LightningModule):
         self.lr = args.lr
         if args.task == 'clf':
             self.loss_fun = losses.cr_ent_ll
-            self.metrics = {'Accuracy': metr.accuracy}
+            self.metrics = {'accuracy': metr.accuracy}
         elif args.task == 'seg':
             self.loss_fun = losses.unet_binary_ll
             self.metrics = {'IOU':metr.iou, 'DICE':metr.dice}
@@ -26,7 +26,7 @@ class BaseModel(pl.LightningModule):
         return torch.utils.data.DataLoader(self.train_dset, self.batch_size,
                                            num_workers=4, shuffle=True)
 
-    def validation_dataloader(self):
+    def val_dataloader(self):
         return torch.utils.data.DataLoader(self.test_dset, self.batch_size,
                                            num_workers=4, shuffle=False)
 
@@ -39,7 +39,7 @@ class BaseModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, y = batch
         out = self(X)
-        loss = self.loss_fun(out, y)
+        loss = self.loss_fun(out, y)['ll']
 
         logs = {'train_loss':loss}
         _, y_pred = torch.max(out.detach(), 1)
@@ -51,14 +51,25 @@ class BaseModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         X, y = batch
         out = self(X)
-        loss = self.loss_fun(out, y)
+        loss = self.loss_fun(out, y)['ll']
 
-        logs = {'validation_loss': loss}
+        logs = {'val_loss': loss}
         _, y_pred = torch.max(out.detach(), 1)
         for m in self.metrics:
-            logs[m] = self.metrics[m](y.cpu().numpy(), y_pred.cpu().numpy())
-        return {'loss': loss, 'log': logs}
-        
+            logs['val_' + m] = self.metrics[m](y.cpu().numpy(), y_pred.cpu().numpy())
+        return logs
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+
+        avg_logs = {'val_loss': avg_loss}
+        for m in self.metrics:
+            avg_logs['val_' + m] = torch.stack([torch.tensor(x['val_' + m]) for x in outputs]).mean()
+
+        # send everything to tensorboard
+        avg_logs['log'] = avg_logs.copy()
+        return avg_logs
+
 # class UNetDWP(DWP, UNet3D):
 #     """
 #     Forward from unet
