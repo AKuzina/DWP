@@ -10,13 +10,13 @@ def load_dataset(args, bootstrap=False):
     root = os.path.join(args.root, args.dataset_name)
 
     if 'notMNIST' in args.dataset_name:
-        train_dset, test_dset = load_notmnist()
+        train_dset, test_dset = load_notmnist(args)
         print(len(train_dset))
         args.task = 'clf'
         args.n_classes = 10
 
     elif 'MNIST' in args.dataset_name:
-        train_dset, test_dset = load_mnist()
+        train_dset, test_dset = load_mnist(args)
         print(len(train_dset))
         args.task = 'clf'
         args.n_classes = 10
@@ -75,7 +75,7 @@ def create_model_name(args):
     if args.pretrain or args.dwp:
         args.model_name += 'from_{}/'.format(args.prior)
         if args.pretrain:
-            args.model_name += 'pretrain_f{}'.format(args.f)
+            args.model_name += 'pretrain'
             if args.freeze:
                 args.model_name += '_freeze'
 
@@ -94,14 +94,13 @@ def create_model_name(args):
                     args.resume += 'full_clf'
 
         else:
-            args.model_name += 'dwp_f{}'.format(args.f)
+            args.model_name += 'dwp'
     else:
-        args.model_name += 'no_prior/nb_f{}'.format(args.f)
+        args.model_name += 'no_prior/nb'
 
     if args.data_type is not None:
         args.model_name += '_{}'.format(args.data_type)
     args.model_name += '_{}'.format(args.train_size)
     if args.short:
         args.model_name += 'SMALL'
-    args.model_name += '_{}'.format(args.iter)
     return args
