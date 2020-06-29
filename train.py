@@ -41,10 +41,6 @@ parser.add_argument('--data_type', type=str, default=None,
 # parser.add_argument('--iter', type=int, default=0, help='Train/test split iteration')
 
 
-
-
-
-
 def main(args):
     mod = models.dwp.BaseModel(args)
     args = utils.create_model_name(args)
@@ -61,7 +57,7 @@ def main(args):
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_last=True
     )
-    # val_check_interval = 100,
+
     trainer = pl.Trainer(gpus=1, show_progress_bar=True,
                          default_root_dir=os.path.join('runs', args.model_name),
                          early_stop_callback=early_stop_callback,

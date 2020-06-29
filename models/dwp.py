@@ -34,7 +34,9 @@ class BaseModel(pl.LightningModule):
         return self.net(x)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.net.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.net.parameters(), lr=self.lr, weight_decay=1e-3)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         X, y = batch
@@ -69,6 +71,22 @@ class BaseModel(pl.LightningModule):
         # send everything to tensorboard
         avg_logs['log'] = avg_logs.copy()
         return avg_logs
+
+class DWP(BaseModel):
+    def __init__(self, args):
+        super(DWP, self).__init__()
+        self.train_dset, self.test_dset, args = utils.load_dataset(args)
+        self.net, args = models.init_net(args)
+
+        self.batch_size = args.batch_size
+        self.lr = args.lr
+        if args.task == 'clf':
+            # self.loss_fun = losses.cr_ent_ll
+            self.metrics = {'accuracy': metr.accuracy}
+        elif args.task == 'seg':
+            # self.loss_fun = losses.unet_binary_ll
+            self.metrics = {'IOU': metr.iou, 'DICE': metr.dice}
+
 
 # class UNetDWP(DWP, UNet3D):
 #     """
