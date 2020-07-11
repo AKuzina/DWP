@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from .unet import UNet3D
-from .kernel_vae import KernelVAE3D, KernelVAE
+from .kernel_vae import KernelVAE
 from .clf_net import MNISTnet
 from .dwp import BaseModel
 
@@ -45,9 +45,9 @@ def init_net(args):
 
     if 'clf' in args.task:
         if 'MNIST' in args.dataset_name:
-            net = MNISTnet(n_classes=10, bayes=args.dwp)
+            net = MNISTnet(n_classes=10, bayes=args.bayes)
     elif 'seg' in args.task:
-        net = UNet3D(args.n_classes, n_channels=args.n_channels, bayes=args.dwp,
+        net = UNet3D(args.n_classes, n_channels=args.n_channels, bayes=args.bayes,
                      shorten=args.short, devices=args.devices)
     # net = net_to_device(args, net)
     return net, args
@@ -70,34 +70,34 @@ def init_net(args):
 #         net.to(args.device)
 #     return net
 
-
-def init_dwp(args):
-    args.net_priors = []
-    args.opt_priors = []
-    root = '/'.join(args.root.split('/')[:-1])
-    weights = os.path.join(root, 'runs/weights/{}/dwp/'.format(args.prior))
-
-    if 'clf' in args.task:
-        args.al = clf_layers
-    else:
-        args.al = unet_layers
-    if args.short:
-        args.al[3] = args.al[3][:3]
-
-    for i in range(len(args.al)):
-        args.net_priors.append(Kernel_3D_VAE(dim_latent = 6, kernel = 3))
-        args.net_priors[i].load_weights(os.path.join(weights, 'DWPVAE_layer{}_0301/best_model.pth'.format(i+1)))
-        if args.devices is not None:
-            args.net_priors[i].to(args.devices[1])
-        else:
-            args.net_priors[i].to(args.device)
-        for param in args.net_priors[i].decode.parameters():
-            param.requires_grad = False
-        for param in args.net_priors[i].linear.parameters():
-            param.requires_grad = False
-        for param in args.net_priors[i].reconstruction_mu.parameters():
-            param.requires_grad = False
-        for param in args.net_priors[i].reconstruction_logsigma.parameters():
-            param.requires_grad = False
-        args.opt_priors.append(optim.Adam(filter(lambda p: p.requires_grad, args.net_priors[i].parameters())))
-    return args
+#
+# def init_dwp(args):
+#     args.net_priors = []
+#     args.opt_priors = []
+#     root = '/'.join(args.root.split('/')[:-1])
+#     weights = os.path.join(root, 'runs/weights/{}/dwp/'.format(args.prior))
+#
+#     if 'clf' in args.task:
+#         args.al = clf_layers
+#     else:
+#         args.al = unet_layers
+#     if args.short:
+#         args.al[3] = args.al[3][:3]
+#
+#     for i in range(len(args.al)):
+#         args.net_priors.append(Kernel_3D_VAE(dim_latent = 6, kernel = 3))
+#         args.net_priors[i].load_weights(os.path.join(weights, 'DWPVAE_layer{}_0301/best_model.pth'.format(i+1)))
+#         if args.devices is not None:
+#             args.net_priors[i].to(args.devices[1])
+#         else:
+#             args.net_priors[i].to(args.device)
+#         for param in args.net_priors[i].decode.parameters():
+#             param.requires_grad = False
+#         for param in args.net_priors[i].linear.parameters():
+#             param.requires_grad = False
+#         for param in args.net_priors[i].reconstruction_mu.parameters():
+#             param.requires_grad = False
+#         for param in args.net_priors[i].reconstruction_logsigma.parameters():
+#             param.requires_grad = False
+#         args.opt_priors.append(optim.Adam(filter(lambda p: p.requires_grad, args.net_priors[i].parameters())))
+#     return args

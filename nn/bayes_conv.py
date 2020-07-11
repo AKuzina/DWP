@@ -39,10 +39,9 @@ class _BayesConvNd(nn.Module):
                 torch.Tensor(out_channels, in_channels // groups, *kernel_size))
         if bias:
             self.mu_bias = nn.Parameter(torch.Tensor(out_channels))
-            self.logsigma_bias = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('mu_bias', None)
-            self.register_parameter('logsigma_bias', None)
+        self.register_parameter('logsigma_bias', None)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -52,10 +51,6 @@ class _BayesConvNd(nn.Module):
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.mu_weight)
             bound = 1 / math.sqrt(fan_in)
             nn.init.uniform_(self.mu_bias, -bound, bound)
-
-            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.logsigma_weight)
-            bound = 1 / math.sqrt(fan_in)
-            nn.init.uniform_(self.logsigma_bias, -bound, bound)
 
     def extra_repr(self):
         s = ('{in_channels}, {out_channels}, kernel_size={kernel_size}'
@@ -75,62 +70,38 @@ class _BayesConvNd(nn.Module):
 
 class BayesConv2d(_BayesConvNd):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True, zero_mean=False,
-                 threshold=3):
+                 padding=0, dilation=1, groups=1, bias=True):
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         padding = _pair(padding)
         dilation = _pair(dilation)
-        self.zero_mean = zero_mean
-        self.threshold = threshold
-        self.log_alpha = None
         super(BayesConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
                                           padding, dilation, False, _pair(0), groups,
                                           bias)
-        if zero_mean:
-            self.mu_weight = nn.Parameter(torch.zeros_like(self.mu_weight))
 
     def forward(self, input):
-        log_alpha = self.logsigma_weight - torch.log(self.mu_weight ** 2 + 1e-8)
-        self.log_alpha = torch.clamp(log_alpha, -5, 5)
-        if self.logsigma_bias is not None:
-            bias = torch.pow(self.logsigma_bias, 2)
-        else:
-            bias = None
-
         if self.training:
-            sigma_sq = F.conv2d(torch.pow(input, 2),
-                                self.mu_weight ** 2 * torch.exp(self.log_alpha),
-                                bias, self.stride, self.padding, self.dilation, self.groups)
-            sigma_out = torch.sqrt(1e-4 + sigma_sq)
+            sigma_sq = F.conv2d(input.pow(2), self.logsigma_weight.exp(), None,
+                                self.stride, self.padding, self.dilation, self.groups)
+            sigma_out = torch.sqrt(1e-10 + sigma_sq)
 
             mu_out = F.conv2d(input, self.mu_weight, self.mu_bias, self.stride,
                               self.padding, self.dilation, self.groups)
+            eps = sigma_out.data.new(sigma_out.size()).normal_()
+            out = eps.mul(sigma_out) + mu_out
         else:
-            mask = (self.log_alpha < self.threshold).float()
-            sigma_sq = F.conv2d(torch.pow(input, 2),
-                                self.mu_weight ** 2 * torch.exp(self.log_alpha) * mask,
-                                bias, self.stride, self.padding, self.dilation, self.groups)
-            sigma_out = torch.sqrt(1e-4 + sigma_sq)
-
-            mu_out = F.conv2d(input, self.mu_weight * mask, self.mu_bias, self.stride,
-                              self.padding, self.dilation, self.groups)
-
-        eps = sigma_out.data.new(sigma_out.size()).normal_()
-        return eps.mul(sigma_out) + mu_out
+            out = F.conv2d(input, self.mu_weight, self.mu_bias, self.stride,
+                           self.padding, self.dilation, self.groups)
+        return out
 
 
 class BayesConv3d(_BayesConvNd):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True, zero_mean=False,
-                 threshold=3):
+                 padding=0, dilation=1, groups=1, bias=True):
         kernel_size = _triple(kernel_size)
         stride = _triple(stride)
         padding = _triple(padding)
         dilation = _triple(dilation)
-        self.zero_mean = zero_mean
-        self.threshold = threshold
-        self.log_alpha = None
 
         super(BayesConv3d, self).__init__(in_channels, out_channels, kernel_size, stride,
                                           padding, dilation, False, _triple(0), groups,
@@ -139,33 +110,16 @@ class BayesConv3d(_BayesConvNd):
             self.mu_weight = nn.Parameter(torch.zeros_like(self.mu_weight))
 
     def forward(self, input):
-        log_alpha = self.logsigma_weight - torch.log(self.mu_weight ** 2 + 1e-8)
-        self.log_alpha = torch.clamp(log_alpha, -5, 5)
-        if self.logsigma_bias is not None:
-            bias = torch.pow(self.logsigma_bias, 2)
-        else:
-            bias = None
-
         if self.training:
-            sigma_sq = F.conv3d(torch.pow(input, 2),
-                                self.mu_weight ** 2 * torch.exp(self.log_alpha), bias,
+            sigma_sq = F.conv3d(input.pow(2), self.logsigma_weight.exp(), None,
                                 self.stride, self.padding, self.dilation, self.groups)
-            sigma_out = torch.sqrt(1e-4 + sigma_sq)
-            # if self.zero_mean:
-            #     mu_out = torch.zeros_like(sigma_out)
-            # else:
+            sigma_out = torch.sqrt(1e-10 + sigma_sq)
+
             mu_out = F.conv3d(input, self.mu_weight, self.mu_bias, self.stride,
                               self.padding, self.dilation, self.groups)
+            eps = sigma_out.data.new(sigma_out.size()).normal_()
+            out = eps.mul(sigma_out) + mu_out
         else:
-            mask = (self.log_alpha < self.threshold).float()
-            mu_out = F.conv3d(input, self.mu_weight * mask, self.mu_bias, self.stride,
-                              self.padding,
-                              self.dilation, self.groups)
-
-            sigma_sq = F.conv3d(torch.pow(input, 2),
-                                self.mu_weight ** 2 * torch.exp(self.log_alpha) * mask,
-                                bias, self.stride, self.padding, self.dilation, self.groups)
-            sigma_out = torch.sqrt(1e-4 + sigma_sq)
-
-        eps = sigma_out.data.new(sigma_out.size()).normal_()
-        return eps.mul(sigma_out) + mu_out
+            out = F.conv3d(input, self.mu_weight * mask, self.mu_bias, self.stride,
+                              self.padding, elf.dilation, self.groups)
+        return out

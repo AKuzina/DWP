@@ -46,16 +46,16 @@ def main(args):
             args.dim_latent = 4
             max_ep = 50
 
-
-        mod = models.kernel_vae.KernelVAE(args)
         args.model_name = '{}/prior/kernel_{}'.format(args.dataset_name, args.kernel_size)
-
+        model_class = models.kernel_vae.KernelVAE
 
     elif args.kernel_dimention == 3:
-        mod = models.kernel_vae.KernelVAE3D(args)
+        print('CREATE MODEL NAME PLEASE')
+        model_class = models.kernel_vae.KernelVAE3D
 
-
-
+    if not os.path.exists(os.path.join(args.root, args.model_name)):
+        os.makedirs(os.path.join(args.root, args.model_name))
+    mod = model_class(args)
     print('Model name:', args.model_name)
 
     early_stop_callback = None

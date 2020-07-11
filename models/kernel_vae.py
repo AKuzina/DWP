@@ -9,88 +9,137 @@ from nn.layers import *
 from utils.kernel_dataset import *
 
 
+class VaeArch(nn.Module):
+    def __init__(self, args):
+        super(VaeArch, self).__init__()
+        self.kernel = args.kernel_size
+        self.kernel_dim = args.kernel_dimention
+        self.dim_latent = args.dim_latent
+
+    def get_encoder(self):
+        if self.kernel_dim == 2:
+            if self.kernel == 7:
+                init_channels = 32
+                encode = nn.Sequential(
+                    nn.Conv2d(1, 32, 3),
+                    nn.ELU(inplace=True),
+                    nn.Conv2d(32, 64, 3),
+                    nn.ELU(inplace=True),
+                    nn.Conv2d(64, 64, 3),
+                    nn.ELU(inplace=True),
+                )
+                hid_ch = 64
+            elif self.kernel == 5:
+                encode = nn.Sequential(
+                    nn.Conv2d(1, 64, 3, padding=1),
+                    nn.ELU(inplace=True),
+                    nn.Conv2d(64, 64, 3, padding=1),
+                    nn.ELU(inplace=True),
+                    nn.Conv2d(64, 128, 3),
+                    nn.ELU(inplace=True),
+                    nn.Conv2d(128, 128, 3),
+                    nn.ELU(inplace=True)
+                )
+                hid_ch = 128
+
+        elif self.kernel_dim == 3 and self.kernel == 3:
+            ch = 32
+            hid_ch = ch*4
+
+            encode = nn.Sequential(
+                nn.Conv3d(1, ch, 3, padding=1),
+                nn.MaxPool3d(2, padding=1),
+                nn.ELU(inplace=True),
+                nn.Conv3d(ch, ch * 2, 3, padding=1),
+                nn.MaxPool3d(2),
+                nn.ELU(inplace=True),
+                nn.Conv3d(ch * 2, ch * 4, 1),
+                nn.ELU(inplace=True)
+            )
+        latent_mu = nn.Sequential(
+            nn.Conv2d(hid_ch, self.dim_latent, 1),
+            nn.Flatten())
+        latent_logsigma = nn.Sequential(
+            nn.Conv2d(hid_ch, self.dim_latent, 1),
+            nn.Flatten())
+
+        return encode, latent_mu, latent_logsigma
+
+    def get_decoder(self):
+        if self.kernel_dim == 2:
+            if self.kernel == 7:
+                decode = nn.Sequential(
+                    nn.ConvTranspose2d(2, 64, 3),
+                    nn.ELU(inplace=True),
+                    nn.ConvTranspose2d(64, 64, 3),
+                    nn.ELU(inplace=True),
+                    nn.ConvTranspose2d(64, 32, 3),
+                    nn.ELU(inplace=True))
+                out_ch = 32
+            elif self.kernel == 5:
+                decode = nn.Sequential(
+                    nn.Conv2d(self.dim_latent, 128, 1),
+                    nn.ELU(inplace=True),
+                    nn.ConvTranspose2d(128, 128, 3),
+                    nn.ELU(inplace=True),
+                    nn.ConvTranspose2d(128, 128, 3),
+                    nn.ELU(inplace=True),
+                    nn.ConvTranspose2d(128, 64, 1),
+                    nn.ELU(inplace=True))
+                out_ch = 64
+
+        elif self.kernel_dim == 3 and self.kernel == 3:
+            ch = 32
+            decode = nn.Sequential(
+            nn.Conv3d(self.dim_latent, ch * 4, 3, padding=1),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose3d(ch * 4, ch * 4, 3),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose3d(ch * 4, ch * 2, 1),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose3d(ch * 2, ch, 1),
+            nn.ELU(inplace=True))
+            out_ch = ch
+
+        rec_mu = nn.Conv2d(out_ch, 1, 1)
+        rec_logsigma = nn.Conv2d(out_ch, 1, 1)
+
+        return decode, rec_mu, rec_logsigma
+
 
 class KernelVAE(pl.LightningModule):
     def __init__(self, args):
-        """
-        dim_latent --- dimention of the latent vector
-        kernel --- size of the input kernel (7 or 5)
-        """
         super(KernelVAE, self).__init__()
-        dim_latent = args.dim_latent
-        kernel = args.kernel_size
+        self.hparams = args
 
-        self.warmup = args.warmup
+        self.warmup = self.hparams.warmup
         self.beta = 1/self.warmup
-        self.lr = args.lr
-        self.batch_size = args.batch_size
+        self.lr = self.hparams.lr
+        self.batch_size = self.hparams.batch_size
 
-        path = os.path.join(args.root, args.dataset_name, 'no_prior/nb_-1')
-        self.train_dset = KernelDataset(root=path, norm_thr=args.norm_thr,
-                                        ker_size=args.kernel_size)
-        print(len(self.train_dset))
+        path = os.path.join(self.hparams.root, self.hparams.dataset_name,
+                            'no_prior/nb_-1')
 
-        self.hid_channels = 128
+        weights_path = os.path.join(self.hparams.root,
+                                    self.hparams.model_name, 'weights.npz')
+        w = None
+        if os.path.exists(weights_path):
+            w = torch.load(weights_path)
 
-        if kernel == 7:
-            init_channels = 32
-            self.encode = nn.Sequential(
-                nn.Conv2d(1, 32, 3),
-                nn.ELU(inplace=True),
-                nn.Conv2d(32, 64, 3),
-                nn.ELU(inplace=True),
-                nn.Conv2d(64, 64, 3),
-                nn.ELU(inplace=True),
-            )
-            hid_ch = 64
+        self.train_dset = KernelDataset(root=path, norm_thr=self.hparams.norm_thr,
+                                        ker_size=self.hparams.kernel_size, weights=w)
+        self.layer_name = self.train_dset.layer_name
 
-            self.decode = nn.Sequential(
-                nn.ConvTranspose2d(2, 64, 3),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose2d(64, 64, 3),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose2d(64, 32, 3),
-                nn.ELU(inplace=True)
-            )
-            out_ch = 32
-            
-        elif kernel == 5:
-            self.encode = nn.Sequential(
-                nn.Conv2d(1, 64, 3, padding=1),
-                nn.ELU(inplace=True),
-                nn.Conv2d(64, 64, 3, padding=1),
-                nn.ELU(inplace=True),
-                nn.Conv2d(64, 128, 3),
-                nn.ELU(inplace=True),
-                nn.Conv2d(128, 128, 3),
-                nn.ELU(inplace=True)
-            )
-            hid_ch = 128
+        if w is None:
+            torch.save({'kernels': self.train_dset.kernels,
+                        'labels': self.train_dset.labels,
+                        'layer_name':self.layer_name}, weights_path)
 
-            self.decode = nn.Sequential(
-                nn.Conv2d(dim_latent, 128, 1),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose2d(128, 128, 3),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose2d(128, 128, 3),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose2d(128, 64, 1),
-                nn.ELU(inplace=True)
-            )
-            out_ch = 64
+        net_getter = VaeArch(self.hparams)
+        self.encode, self.latent_mu, self.latent_logsigma = net_getter.get_encoder()
+        self.decode, self.rec_mu, self.rec_logsigma = net_getter.get_decoder()
 
-        self.latent_mu = nn.Sequential(
-            nn.Conv2d(hid_ch, dim_latent, 1),
-            nn.Flatten()
-        )
-        self.latent_logsigma = nn.Sequential(
-            nn.Conv2d(hid_ch, dim_latent, 1),
-            nn.Flatten()
-        )
-
-        self.rec_mu = nn.Conv2d(out_ch, 1, 1)
-        self.rec_logsigma = nn.Conv2d(out_ch, 1, 1)
-        self.hid_shape = [-1, dim_latent, 1, 1]
+        self.hid_shape = [-1, self.hparams.dim_latent, 1, 1]
 
 
     def train_dataloader(self):
@@ -125,14 +174,11 @@ class KernelVAE(pl.LightningModule):
         return out_mu, out_logsigma, z_mu, z_logsigma, z
 
     def loss(self, x, x_mu, x_logsigma, z_mu, z_logsigma, batch_idx):
-        # print( x.shape, x_mu.shape, x_logsigma.shape, z_mu.shape, z_logsigma.shape)
         kl = -0.5 * (1 + z_logsigma - z_mu.pow(2) - z_logsigma.exp())
         kl = kl.sum(1, keepdim=True)
 
         re = 0.5*(x_logsigma + np.log(2 * np.pi) + (x_mu - x).pow(2) / x_logsigma.exp())
         re = re.view(re.shape[0], -1).sum(1, keepdim=True)
-
-        # beta = torch.tensor(min(1., self.warmup*batch_idx))
 
         loss = torch.mean(re + self.beta * kl)
 
@@ -150,53 +196,3 @@ class KernelVAE(pl.LightningModule):
 
         logs['train_loss'] = loss.data.cpu()
         return {'loss': loss, 'log': logs}
-
-
-class KernelVAE3D(KernelVAE):
-    def __init__(self, args):
-        """
-        dim_latent --- dimention of the latent vector
-        kernel --- size of the input kernel
-        """
-        super(KernelVAE3D, self).__init__()
-        if kernel == 3:
-            ch = 32
-            self.hid_channels = init_channels * 4
-
-            self.encode = nn.Sequential(
-                nn.Conv3d(1, ch, 3, padding=1),
-                nn.MaxPool3d(2, padding=1),
-                nn.ELU(inplace=True),
-                nn.Conv3d(ch, ch * 2, 3, padding=1),
-                nn.MaxPool3d(2),
-                nn.ELU(inplace=True),
-                nn.Conv3d(ch * 2, ch * 4, 1),
-                nn.ELU(inplace=True),
-                Flatten()
-            )
-
-            self.decode = nn.Sequential(
-                nn.Conv3d(ch * 4, ch * 4, 3, padding=1),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose3d(ch * 4, ch * 4, 3),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose3d(ch * 4, ch * 2, 1),
-                nn.ELU(inplace=True),
-                nn.ConvTranspose3d(ch * 2, ch, 1),
-                nn.ELU(inplace=True)
-            )
-
-        self.latent_mu = nn.Linear(self.hid_channels, dim_latent)
-        self.latent_logsigma = nn.Linear(self.hid_channels, dim_latent)
-        self.linear = nn.Linear(dim_latent, self.hid_channels)
-
-        self.reconstruction_mu = nn.Sequential(
-            nn.ConvTranspose3d(ch, 1, 1),
-            nn.Tanh()
-        )
-
-        self.reconstruction_logsigma = nn.Sequential(
-            nn.ConvTranspose3d(ch, 1, 1),
-            nn.Tanh()
-        )
-        self.hid_shape = [-1, self.hid_channels, 1, 1, 1]

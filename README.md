@@ -24,7 +24,22 @@ The method perform better that randomly initialized and fine-tuned models.
 
 
 # Experiments
+- Load Source and target dataset into `data/dataset_name` folders. Below are examples for MNIST abd notMNIST datasets (they will be loaded automatically)
 
+- Train N models on the source dataset
+```bash
+python3 train.py --dataset_name notMNIST --trian_size -1 
+```
+
+- Train VAE
+```bash
+python3 train_vae.py --kernel_size 7
+```
+
+- Train model on the target dataset with VAE as a prior
+```bash
+python3 train.py --dataset_name MNIST --prior notMNIST --trian_size 100 
+```
 
 # Citation
 

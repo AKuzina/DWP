@@ -10,45 +10,49 @@ import torchvision
 
 class KernelDataset(data.Dataset):
     def __init__(self, root, ker_size=5,
-                 layer=None,
-                 norm_thr=1e-2):
+                 layer=None, norm_thr=1e-2, weights=None):
         super().__init__()
         """
         Take all kernels from a given layer of all NNs (with the same architecture, but trained with different initialization)
 
         root --- path to folder with model weights
         layer --- name of the layer in weight dictionary, e.g. ['0.weight', '3.weight', '5.weight'] for CIFAR conv net
+        weights --- prepared dataset, dict {'kernels': torch.tensor, 'labels: torch.tensor}
         """
+        if weights is None:
+            self.root = os.path.join(root, 'lightning_logs')
+            folders = [os.path.join(self.root, x, 'checkpoints/last.ckpt')
+                       for x in os.listdir(self.root) if 'version' in x]
 
-        self.root = os.path.join(root, 'lightning_logs')
-        folders = [os.path.join(self.root, x, 'checkpoints/last.ckpt')
-                   for x in os.listdir(self.root) if 'version' in x]
+            all_weights = list(map(lambda x: torch.load(x)['state_dict'], folders))
 
+            # if list of layers is not given, extract all layers with a given kernel size:
+            if layer is None:
+                layer = []
+                for k in all_weights[0].keys():
+                    if all_weights[0][k].shape[-1] == ker_size:
+                        layer.append(k)
+            self.layer_name = layer
 
-        all_weights = list(map(lambda x: torch.load(x)['state_dict'], folders))
+            print('Use filters from {} layers of {} model(s)'.format(len(layer), len(folders)))
+            def extract_layer(weight_dict):
+                all_kernels = torch.cat([weight_dict[k] for k in layer])
+                all_kernels = all_kernels.view(-1, all_kernels.shape[2], all_kernels.shape[3])
+                return all_kernels
 
-        # if list of layers is not given, extract all layers with a given kernel size:
-        if layer is None:
-            layer = []
-            for k in all_weights[0].keys():
-                if all_weights[0][k].shape[-1] == ker_size:
-                    layer.append(k)
-            print(layer)
+            self.kernels = torch.cat(list(map(extract_layer, all_weights)))
+            self.labels = torch.zeros(self.kernels.shape[0])
 
-        print('Use filters from {} layers of {} model(s)'.format(len(layer), len(folders)))
-        def extract_layer(weight_dict):
-            all_kernels = torch.cat([weight_dict[k] for k in layer])
-            all_kernels = all_kernels.view(-1, all_kernels.shape[2], all_kernels.shape[3])
-            return all_kernels
-
-        self.kernels = torch.cat(list(map(extract_layer, all_weights)))
-        self.labels = torch.zeros(self.kernels.shape[0])
-
-        # throw away tensors of small norm
-        mask = np.where(np.array(list(map(torch.norm,
-                                          torch.unbind(self.kernels, 0)))) > norm_thr)[0]
-        self.kernels = self.kernels[mask]
-        self.labels = self.labels[mask]
+            # throw away tensors of small norm
+            mask = np.where(np.array(list(map(torch.norm,
+                                              torch.unbind(self.kernels, 0)))) > norm_thr)[0]
+            self.kernels = self.kernels[mask]
+            self.labels = self.labels[mask]
+        else:
+            print('Load kernel dataset')
+            self.kernels = weights['kernels']
+            self.labels = weights['labels']
+            self.layer_name = weights['layer_name']
 
     def __getitem__(self, index):
         return self.kernels[index].unsqueeze(0), self.labels[index]
