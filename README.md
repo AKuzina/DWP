@@ -22,14 +22,24 @@ The method perform better that randomly initialized and fine-tuned models.
 
 
 # Experiments
-- Load Source and target dataset into `data/dataset_name` folders. Below are examples for MNIST abd notMNIST datasets (they will be loaded automatically)
+## Environment setup
+The code is base on `PyTorch 1.5.0` and `PyTorch-Lightning 0.8.0`. 
+The exact specification of our environment is provided in the file `environment.yml` and
+can be created via 
+```bash
+conda env create -f environment.yml
+```
 
-- Train N models on the source dataset
+## Example on toy dataset
+- Load Source and target dataset into `data/dataset_name` folders. 
+Below are examples for `MNIST` abd `notMNIST` datasets (they will be loaded automatically)
+
+- Train N models on the source dataset. Here full notMNIST dataset is used  
 ```bash
 python3 train.py --dataset_name notMNIST --trian_size -1 
 ```
 
-- Train VAE on the kernels 
+- Train VAE on the kernels
 ```bash
 python3 train_vae.py --kernel_size 7
 ```
