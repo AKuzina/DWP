@@ -50,7 +50,7 @@ python3 train.py --dataset_name MNIST --prior notMNIST --trian_size 100
 ```
 
 # Citation
-If you find our paper or code useful, feel free to cite the [paper]((https://www.frontiersin.org/articles/10.3389/fnins.2019.00844/full):
+If you find our paper or code useful, feel free to cite the [paper](https://www.frontiersin.org/articles/10.3389/fnins.2019.00844/full):
 ```text
 @article{kuzina2019bayesian,
   title={Bayesian generative models for knowledge transfer in mri semantic segmentation problems},
