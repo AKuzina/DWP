@@ -1,1 +1,9 @@
 theme: jekyll-theme-cayman
+
+
+title: "DWP for MRI Semantic Segmentation"
+
+analytics:
+  provider               :  "google" 
+  google:
+    tracking_id          : "UA-153586109-1"
