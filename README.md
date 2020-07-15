@@ -1,6 +1,7 @@
 Pytorch implementation of the paper [Bayesian Generative Models for Knowledge Transfer in MRI Semantic Segmentation Problems](https://www.frontiersin.org/articles/10.3389/fnins.2019.00844/full)
 
-We use Deep Weight Prior (DWP) [1] to perform knowledge transfer from large source to the smaller target dataset. 
+We use Deep Weight Prior (DWP) [1] to perform **transfer learning** from large source to the smaller target dataset with medical images. 
+
 We use a common benchmark - BRATS18 [2] as a target and MS [3] dataset as source dataset. 
    
 
@@ -28,18 +29,18 @@ The method perform better that randomly initialized and fine-tuned models.
 python3 train.py --dataset_name notMNIST --trian_size -1 
 ```
 
-- Train VAE
+- Train VAE on the kernels 
 ```bash
 python3 train_vae.py --kernel_size 7
 ```
 
-- Train model on the target dataset with VAE as a prior
+- Train model on the target dataset with VAE from the previous step as a prior
 ```bash
 python3 train.py --dataset_name MNIST --prior notMNIST --trian_size 100 
 ```
 
 # Citation
-
+If you find our paper or code useful, feel free to cite the [paper]((https://www.frontiersin.org/articles/10.3389/fnins.2019.00844/full):
 ```text
 @article{kuzina2019bayesian,
   title={Bayesian generative models for knowledge transfer in mri semantic segmentation problems},
