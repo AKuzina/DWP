@@ -1,6 +1,3 @@
-# DWP for MRI Sematic Segmentation
-
-
 Pytorch implementation of the paper [Bayesian Generative Models for Knowledge Transfer in MRI Semantic Segmentation Problems](https://www.frontiersin.org/articles/10.3389/fnins.2019.00844/full)
 
 We use Deep Weight Prior (DWP) [1] to perform knowledge transfer from large source to the smaller target dataset. 
